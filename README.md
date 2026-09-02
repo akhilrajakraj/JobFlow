@@ -1,4 +1,4 @@
-# JobFlow
+# JobFlow — Distributed Background Job Processing Platform
 
 > A production-oriented distributed background job processing platform for submitting, executing, tracking, and monitoring asynchronous workloads.
 
@@ -13,54 +13,73 @@
 
 ## Overview
 
-JobFlow is a learning-focused backend systems project designed around a common production requirement: executing long-running or resource-intensive work outside the request-response lifecycle of an API.
+JobFlow is a learning-focused backend systems project built around a common production problem: executing long-running or resource-intensive work outside the API request-response lifecycle.
 
-Instead of making an API client wait for a task to finish, JobFlow accepts a job, places it on a queue, processes it asynchronously through workers, persists execution state, and exposes the job lifecycle through an API and dashboard.
+A client submits a job through the API. JobFlow records the job, places work onto a queue, processes it through background workers, persists execution state and results, and exposes the lifecycle through an API and web dashboard.
 
-The project is intentionally designed to explore reliable background processing, queue-based architectures, failure handling, retries, task prioritization, worker health, and system observability.
+The project is intentionally focused on reliable asynchronous processing, queue-based architecture, retries, task prioritization, worker health, failure handling, and operational visibility.
+
+## Architecture
+
+```text
+                         ┌─────────────────┐
+                         │     Client      │
+                         └────────┬────────┘
+                                  │
+                                  ▼
+                         ┌─────────────────┐
+                         │   FastAPI API   │
+                         └──────┬─────┬────┘
+                                │     │
+                    persist     │     │ enqueue
+                                ▼     ▼
+                       ┌──────────┐  ┌──────────┐
+                       │PostgreSQL│  │  Redis   │
+                       └──────────┘  └────┬─────┘
+                                          │
+                                          ▼
+                                  ┌──────────────┐
+                                  │Celery Workers│
+                                  └──────┬───────┘
+                                         │
+                                         ▼
+                                  Execute / Retry
+                                         │
+                                         ▼
+                                  Persist Results
+                                         │
+                                         ▼
+                                  Dashboard / API
+```
 
 ## Core Workflow
 
-```text
-Client
-  │
-  ▼
-REST API
-  │
-  ├──────────────► PostgreSQL
-  │
-  ▼
-Redis Queue
-  │
-  ▼
-Celery Workers
-  │
-  ├── Execute Job
-  │
-  ├── Retry on Failure
-  │
-  └── Record Result
-  │
-  ▼
-Job Status / Dashboard
-```
+1. A client submits a job through the REST API.
+2. The API creates a persistent job record.
+3. The job is placed on the Redis-backed queue.
+4. A Celery worker picks up the job asynchronously.
+5. Execution state and attempts are tracked.
+6. Successful results or failure information are persisted.
+7. Retry policies can requeue failed work.
+8. Clients can inspect job status and execution history through the API and dashboard.
 
 ## Planned Capabilities
 
 - Asynchronous job submission and execution
-- Job lifecycle and status tracking
-- Persistent job results and error information
+- Job lifecycle tracking: `QUEUED`, `RUNNING`, `SUCCESS`, `FAILED`, `RETRYING`, `CANCELLED`
+- Persistent results and error information
 - Execution-attempt history
-- Configurable retry handling
+- Configurable retry handling with backoff
 - Priority-based job processing
 - Worker registration and health monitoring
-- Job execution metrics and history
+- Worker heartbeat tracking
+- Job execution metrics and timing information
 - REST API for application integration
-- Web dashboard for operational visibility
+- React + TypeScript operational dashboard
 - Containerized local development
 - Automated testing and CI
 
-> Features are being implemented incrementally. The repository currently represents the foundation of the project rather than a completed production service.
+> Features are being implemented incrementally. The repository currently contains the architectural foundation and scaffolding; it is not yet a completed production service.
 
 ## Technology Stack
 
@@ -81,15 +100,77 @@ Job Status / Dashboard
 
 ```text
 JobFlow/
-├── .github/                 # CI workflows
-├── backend/                 # API, domain logic, models, schemas, tests
-├── frontend/                # React dashboard
-├── infrastructure/          # Docker, Nginx, PostgreSQL and Redis configuration
-├── docs/                    # Architecture, API and technical decisions
-├── scripts/                 # Development and operational scripts
-├── .env.example             # Environment variable template
-├── Makefile                 # Development command shortcuts
+├── .github/
+│   └── workflows/                 # CI workflows (planned/added as CI evolves)
+│
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── routes/
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── jobs.py
+│   │   │   │   └── workers.py
+│   │   │   └── dependencies.py
+│   │   ├── core/
+│   │   │   ├── config.py
+│   │   │   ├── database.py
+│   │   │   └── security.py
+│   │   ├── models/
+│   │   │   ├── job.py
+│   │   │   ├── job_attempt.py
+│   │   │   └── worker.py
+│   │   ├── schemas/
+│   │   │   ├── auth.py
+│   │   │   └── job.py
+│   │   ├── services/
+│   │   │   ├── job_service.py
+│   │   │   └── worker_service.py
+│   │   └── main.py
+│   ├── requirements/
+│   │   ├── base.txt
+│   │   ├── development.txt
+│   │   └── production.txt
+│   ├── tests/
+│   │   ├── api/
+│   │   ├── services/
+│   │   └── worker/
+│   └── Dockerfile
+│
+├── frontend/
+│   └── src/
+│       ├── components/
+│       ├── hooks/
+│       ├── pages/
+│       ├── services/
+│       ├── types/
+│       ├── utils/
+│       ├── App.tsx
+│       └── main.tsx
+│
+├── infrastructure/
+│   ├── compose/
+│   │   ├── docker-compose.yml
+│   │   └── docker-compose.dev.yml
+│   ├── docker/
+│   │   ├── nginx/
+│   │   │   └── nginx.conf
+│   │   └── postgres/
+│   │       └── init/
+│   └── redis/
+│
+├── docs/
+│   ├── architecture/
+│   │   └── system-overview.md
+│   └── api/
+│
+├── scripts/
+│   ├── setup.sh
+│   └── health_check.sh
+│
+├── .env.example
+├── .gitignore
 ├── LICENSE
+├── Makefile
 └── README.md
 ```
 
@@ -97,30 +178,27 @@ JobFlow/
 
 JobFlow is being built with emphasis on:
 
-- **Separation of concerns** — API, business logic, persistence, and workers remain independently organized.
-- **Reliability** — failed jobs should be observable, retryable, and traceable.
+- **Separation of concerns** — API, business logic, persistence, and workers are organized independently.
+- **Reliability** — failed work should be observable, retryable, and traceable.
 - **Asynchronous execution** — expensive work should not unnecessarily block API requests.
 - **Observability** — job and worker state should be visible rather than hidden inside logs.
-- **Testability** — core behavior should be covered by automated tests.
+- **Testability** — core behavior should be covered by automated tests as implementation progresses.
 - **Containerized development** — supporting services should be reproducible through Docker.
-- **Clear architecture** — design decisions and system boundaries should be documented as the project evolves.
-
-## Development Status
-
-🚧 **JobFlow is under active development.**
-
-The project is being developed incrementally, starting with the core job-submission and asynchronous execution pipeline before adding reliability and operational features.
+- **Clear architecture** — system boundaries and technical decisions should be documented as the project evolves.
 
 ## Roadmap
 
 ### Phase 1 — Foundation
 
 - [x] Repository structure
-- [ ] FastAPI application setup
+- [x] Core application scaffolding
+- [x] Backend package organization
+- [x] Frontend scaffolding
+- [x] Infrastructure configuration layout
+- [ ] FastAPI application implementation
 - [ ] PostgreSQL integration
 - [ ] Redis integration
 - [ ] Celery integration
-- [ ] Basic Docker environment
 
 ### Phase 2 — Job Processing
 
@@ -135,6 +213,7 @@ The project is being developed incrementally, starting with the core job-submiss
 - [ ] Retry handling
 - [ ] Execution attempts
 - [ ] Job priorities
+- [ ] Exponential backoff
 - [ ] Failure recovery
 
 ### Phase 4 — Operations
@@ -154,13 +233,13 @@ The project is being developed incrementally, starting with the core job-submiss
 
 ## Why JobFlow?
 
-JobFlow is intended to go beyond a conventional CRUD application. The project focuses on understanding what happens after an API receives work that cannot or should not be completed during the original request.
+JobFlow is designed to go beyond a conventional CRUD application. It provides a practical environment for understanding what happens after an API receives work that cannot or should not be completed during the original request.
 
-It provides a practical environment for exploring concepts such as message queues, background workers, retries, task state machines, concurrency, failure handling, service health, and distributed application architecture.
+The project provides hands-on experience with message queues, background workers, task state machines, concurrency, retries, failure handling, service health, persistence, and distributed application architecture.
 
 ## Learning Outcomes
 
-Through the project, the main areas of focus are:
+Through JobFlow, the main areas of focus are:
 
 - Backend API design
 - Distributed task processing
@@ -172,6 +251,12 @@ Through the project, the main areas of focus are:
 - System observability
 - Automated testing
 - Production-oriented backend architecture
+
+## Development Status
+
+🚧 **JobFlow is under active development.**
+
+The current repository establishes the project architecture and development foundation. Implementation will proceed incrementally, starting with the core job-submission and asynchronous execution pipeline before adding reliability and operational features.
 
 ## License
 
