@@ -1,0 +1,1 @@
+"""Job execution attempt model."""
