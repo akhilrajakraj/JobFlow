@@ -169,7 +169,7 @@ def execute_job(self, job_id: str) -> dict:
             try:
                 with job_duration.time():
                     result = _execute(job.task_type, job.payload)
-            except SoftTimeLimitExceeded as exc:
+            except SoftTimeLimitExceeded:
                 attempt.error = f"Job exceeded timeout of {job.timeout_seconds}s"
                 attempt.completed_at = datetime.now(timezone.utc)
                 job.error = attempt.error
@@ -178,10 +178,10 @@ def execute_job(self, job_id: str) -> dict:
                 session.commit()
                 jobs_completed.labels(status="FAILED").inc()
                 raise
-            except PermanentJobError:
-                attempt.error = "Permanent job failure"
+            except PermanentJobError as exc:
+                attempt.error = str(exc)
                 attempt.completed_at = datetime.now(timezone.utc)
-                job.error = attempt.error
+                job.error = str(exc)
                 job.status = JobStatus.FAILED
                 job.completed_at = datetime.now(timezone.utc)
                 session.commit()
