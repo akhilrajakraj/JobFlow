@@ -1,11 +1,11 @@
 """Celery execution and worker lifecycle tasks."""
 
 import os
-import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
-from celery.exceptions import MaxRetriesExceededError, SoftTimeLimitExceeded
+from celery.exceptions import SoftTimeLimitExceeded
 from celery.signals import heartbeat_sent, worker_ready, worker_shutdown
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -53,7 +53,14 @@ def register_celery_worker(sender=None, **_: object) -> None:
             worker = session.scalar(select(Worker).where(Worker.worker_name == hostname))
             now = datetime.now(timezone.utc)
             if worker is None:
-                session.add(Worker(worker_name=hostname, hostname=hostname, status="ONLINE", last_heartbeat_at=now))
+                session.add(
+                    Worker(
+                        worker_name=hostname,
+                        hostname=hostname,
+                        status="ONLINE",
+                        last_heartbeat_at=now,
+                    )
+                )
             else:
                 worker.status = "ONLINE"
                 worker.last_heartbeat_at = now
@@ -64,7 +71,7 @@ def register_celery_worker(sender=None, **_: object) -> None:
 
 @heartbeat_sent.connect
 def update_worker_heartbeat(sender=None, **_: object) -> None:
-    """Persist Celery's native heartbeat so abrupt worker loss becomes detectable."""
+    """Persist Celery's native heartbeat."""
     name = getattr(sender, "hostname", None) or _worker_name()
     engine = _engine()
     try:
@@ -80,6 +87,7 @@ def update_worker_heartbeat(sender=None, **_: object) -> None:
 
 @worker_shutdown.connect
 def mark_celery_worker_offline(sender=None, **_: object) -> None:
+    """Mark a worker offline when Celery shuts down."""
     name = getattr(sender, "hostname", None) or _worker_name()
     _set_worker_status(name, "OFFLINE")
 
@@ -94,15 +102,25 @@ def _execute(task_type: str, payload: dict) -> dict:
         return {"echo": payload}
     if task_type == "sum":
         numbers = payload.get("numbers", [])
-        if not isinstance(numbers, list) or not all(isinstance(number, (int, float)) for number in numbers):
-            raise PermanentJobError("sum task requires payload.numbers to be a list of numbers")
+        if not isinstance(numbers, list) or not all(
+            isinstance(number, (int, float)) for number in numbers
+        ):
+            raise PermanentJobError(
+                "sum task requires payload.numbers to be a list of numbers"
+            )
         return {"sum": sum(numbers)}
     if task_type == "fail":
         raise RetryableJobError("Intentional transient failure for retry testing")
     return {"message": "Job executed", "task_type": task_type, "payload": payload}
 
 
-def _retry_or_fail(task, session: Session, job: Job, attempt: JobAttempt, exc: RetryableJobError) -> dict:
+def _retry_or_fail(
+    task: Any,
+    session: Session,
+    job: Job,
+    attempt: JobAttempt,
+    exc: RetryableJobError,
+) -> dict:
     attempt.error = str(exc)
     attempt.completed_at = datetime.now(timezone.utc)
     job.retry_count += 1
@@ -126,7 +144,6 @@ def execute_job(self, job_id: str) -> dict:
     parsed_id = uuid.UUID(job_id)
     engine = _engine()
     counted_active = False
-    started = time.monotonic()
     try:
         with Session(engine) as session:
             job = session.get(Job, parsed_id)
@@ -160,11 +177,11 @@ def execute_job(self, job_id: str) -> dict:
                 job.completed_at = datetime.now(timezone.utc)
                 session.commit()
                 jobs_completed.labels(status="FAILED").inc()
-                raise exc
-            except PermanentJobError as exc:
-                attempt.error = str(exc)
+                raise
+            except PermanentJobError:
+                attempt.error = "Permanent job failure"
                 attempt.completed_at = datetime.now(timezone.utc)
-                job.error = str(exc)
+                job.error = attempt.error
                 job.status = JobStatus.FAILED
                 job.completed_at = datetime.now(timezone.utc)
                 session.commit()
@@ -172,10 +189,15 @@ def execute_job(self, job_id: str) -> dict:
                 raise
             except RetryableJobError as exc:
                 return _retry_or_fail(self, session, job, attempt, exc)
-            except Exception as exc:
-                return _retry_or_fail(self, session, job, attempt, RetryableJobError(str(exc)))
+            except (RuntimeError, ValueError, TypeError, KeyError) as exc:
+                return _retry_or_fail(
+                    self,
+                    session,
+                    job,
+                    attempt,
+                    RetryableJobError(str(exc)),
+                )
 
-            # Cancellation can race with task execution; never overwrite it with SUCCESS.
             session.refresh(job)
             if job.status == JobStatus.CANCELLED:
                 attempt.completed_at = datetime.now(timezone.utc)
@@ -190,10 +212,7 @@ def execute_job(self, job_id: str) -> dict:
             session.commit()
             jobs_completed.labels(status="SUCCESS").inc()
             return result
-    except MaxRetriesExceededError:
-        raise
     finally:
         if counted_active:
             active_jobs.dec()
-        _ = time.monotonic() - started
         engine.dispose()
