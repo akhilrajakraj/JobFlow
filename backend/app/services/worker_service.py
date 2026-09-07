@@ -1,43 +1,33 @@
 """Worker registration and heartbeat business logic."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.metrics import registered_workers
 from app.models.worker import Worker
 from app.schemas.worker import WorkerRegister
 
+HEARTBEAT_TIMEOUT_SECONDS = 60
+
 
 async def register_worker(session: AsyncSession, data: WorkerRegister) -> Worker:
-    """Create or refresh a worker registration."""
-
     worker = await session.scalar(select(Worker).where(Worker.worker_name == data.worker_name))
     now = datetime.now(timezone.utc)
     if worker is None:
-        worker = Worker(
-            worker_name=data.worker_name,
-            hostname=data.hostname,
-            concurrency=data.concurrency,
-            metadata=data.metadata,
-            status="ONLINE",
-            last_heartbeat_at=now,
-        )
+        worker = Worker(worker_name=data.worker_name, hostname=data.hostname, concurrency=data.concurrency,
+                        metadata=data.metadata, status="ONLINE", last_heartbeat_at=now)
         session.add(worker)
     else:
-        worker.hostname = data.hostname
-        worker.concurrency = data.concurrency
-        worker.metadata = data.metadata
-        worker.status = "ONLINE"
-        worker.last_heartbeat_at = now
+        worker.hostname, worker.concurrency, worker.metadata = data.hostname, data.concurrency, data.metadata
+        worker.status, worker.last_heartbeat_at = "ONLINE", now
     await session.commit()
     await session.refresh(worker)
     return worker
 
 
 async def heartbeat_worker(session: AsyncSession, worker_name: str) -> Worker | None:
-    """Refresh a worker heartbeat."""
-
     worker = await session.scalar(select(Worker).where(Worker.worker_name == worker_name))
     if worker is None:
         return None
@@ -49,7 +39,12 @@ async def heartbeat_worker(session: AsyncSession, worker_name: str) -> Worker | 
 
 
 async def list_workers(session: AsyncSession) -> list[Worker]:
-    """Return workers ordered by registration time."""
-
     result = await session.execute(select(Worker).order_by(Worker.registered_at.desc()))
-    return list(result.scalars().all())
+    workers = list(result.scalars().all())
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS)
+    for worker in workers:
+        if worker.last_heartbeat_at < cutoff and worker.status == "ONLINE":
+            worker.status = "STALE"
+    await session.commit()
+    registered_workers.set(len(workers))
+    return workers
