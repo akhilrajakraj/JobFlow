@@ -2,10 +2,16 @@
 
 from app.models.job import JobStatus
 
-
 _ALLOWED: dict[JobStatus, frozenset[JobStatus]] = {
     JobStatus.QUEUED: frozenset({JobStatus.RUNNING, JobStatus.CANCELLED}),
-    JobStatus.RUNNING: frozenset({JobStatus.SUCCESS, JobStatus.RETRYING, JobStatus.FAILED, JobStatus.CANCELLED}),
+    JobStatus.RUNNING: frozenset(
+        {
+            JobStatus.SUCCESS,
+            JobStatus.RETRYING,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        }
+    ),
     JobStatus.RETRYING: frozenset({JobStatus.RUNNING, JobStatus.CANCELLED}),
     JobStatus.SUCCESS: frozenset(),
     JobStatus.FAILED: frozenset(),
