@@ -32,7 +32,7 @@ async def submit_job(
     data: JobCreate,
     session: Session,
     _: Operator,
-    idempotency_key: IdempotencyHeader = None,
+    idempotency_key: IdempotencyHeader,
 ) -> JobResponse:
     """Submit a background job for asynchronous execution."""
     if idempotency_key:
