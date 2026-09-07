@@ -8,12 +8,14 @@ from app.api.routes.jobs import router as jobs_router
 from app.core.config import settings
 from app.core.database import check_database_connection, engine
 from app.core.redis import check_redis_connection, close_redis
+from app.db.init_db import init_db
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Manage application-owned database and Redis resources."""
+    """Manage application-owned resources and development schema."""
 
+    await init_db()
     yield
     await engine.dispose()
     await close_redis()
