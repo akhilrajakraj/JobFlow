@@ -9,7 +9,16 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-job_status = postgresql.ENUM("QUEUED", "RUNNING", "SUCCESS", "FAILED", "RETRYING", "CANCELLED", name="job_status")
+job_status = postgresql.ENUM(
+    "QUEUED",
+    "RUNNING",
+    "SUCCESS",
+    "FAILED",
+    "RETRYING",
+    "CANCELLED",
+    name="job_status",
+    create_type=False,
+)
 
 
 def upgrade() -> None:
@@ -38,7 +47,12 @@ def upgrade() -> None:
     op.create_table(
         "job_attempts",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("job_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "job_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("jobs.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("attempt_number", sa.Integer(), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("completed_at", sa.DateTime(timezone=True)),
