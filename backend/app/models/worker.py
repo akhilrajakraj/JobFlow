@@ -23,7 +23,9 @@ class Worker(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="ONLINE")
     concurrency: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     active_tasks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    worker_metadata: Mapped[dict] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
     registered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
