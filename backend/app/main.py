@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.routes.jobs import router as jobs_router
 from app.core.config import settings
 from app.core.database import check_database_connection, engine
 from app.core.redis import check_redis_connection, close_redis
@@ -24,6 +25,7 @@ app = FastAPI(
     debug=settings.debug,
     lifespan=lifespan,
 )
+app.include_router(jobs_router, prefix="/api/v1")
 
 
 @app.get("/", tags=["system"])
