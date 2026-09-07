@@ -24,7 +24,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 Session = Annotated[AsyncSession, Depends(get_db)]
 AuthenticatedUser = Annotated[User, Depends(current_user)]
 Operator = Annotated[User, Depends(require_role("ADMIN", "OPERATOR"))]
-IdempotencyHeader = Annotated[str | None, Header(default=None, alias="Idempotency-Key")]
+IdempotencyHeader = Annotated[str | None, Header(alias="Idempotency-Key")]
 
 
 @router.post("", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -32,7 +32,7 @@ async def submit_job(
     data: JobCreate,
     session: Session,
     _: Operator,
-    idempotency_key: IdempotencyHeader,
+    idempotency_key: IdempotencyHeader = None,
 ) -> JobResponse:
     """Submit a background job for asynchronous execution."""
     if idempotency_key:
