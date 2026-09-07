@@ -38,9 +38,10 @@ async def get_job_by_id(job_id: uuid.UUID, session: AsyncSession = Depends(get_d
 
 @router.post("/{job_id}/cancel", response_model=JobResponse)
 async def cancel(job_id: uuid.UUID, session: AsyncSession = Depends(get_db)) -> JobResponse:
-    job = await cancel_job(session, job_id)
+    job = await get_job(session, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status in {JobStatus.SUCCESS, JobStatus.FAILED, JobStatus.CANCELLED}:
         raise HTTPException(status_code=409, detail="Job is already in a terminal state")
-    return job
+    cancelled = await cancel_job(session, job_id)
+    return cancelled
