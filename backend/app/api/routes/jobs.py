@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import current_user, require_role
@@ -21,9 +21,9 @@ from app.services.job_service import (
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
-Session = Annotated[AsyncSession, get_db]
-AuthenticatedUser = Annotated[User, current_user]
-Operator = Annotated[User, require_role("ADMIN", "OPERATOR")]
+Session = Annotated[AsyncSession, Depends(get_db)]
+AuthenticatedUser = Annotated[User, Depends(current_user)]
+Operator = Annotated[User, Depends(require_role("ADMIN", "OPERATOR"))]
 IdempotencyHeader = Annotated[str | None, Header(alias="Idempotency-Key")]
 
 
@@ -55,8 +55,8 @@ async def submit_job(
 async def get_jobs(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    session: Session = None,
-    _: AuthenticatedUser = None,
+    session: Session,
+    _: AuthenticatedUser,
 ) -> JobListResponse:
     """Return a paginated list of jobs."""
     items, total = await list_jobs(session, limit=limit, offset=offset)
