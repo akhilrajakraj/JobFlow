@@ -8,14 +8,47 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: jobflow
+          POSTGRES_USER: jobflow
+          POSTGRES_PASSWORD: jobflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobflow -d jobflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
+    env:
+      DATABASE_URL: postgresql+asyncpg://jobflow:jobflow@localhost:5432/jobflow
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
+      JWT_SECRET: ci-only-secret-that-is-long-enough-for-tests-123456
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements/base.txt
+          cache: pip
+          cache-dependency-path: backend/requirements/development.txt
+      - run: pip install -r requirements/development.txt
+      - run: ruff check app tests
       - run: python -m compileall app tests
+      - run: alembic upgrade head
       - run: pytest -q
