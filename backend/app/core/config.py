@@ -1,48 +1,28 @@
 """Application configuration."""
-
 from functools import lru_cache
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class Settings(BaseSettings):
-    """Runtime settings loaded from environment variables and .env."""
-
     app_name: str = "JobFlow"
     app_version: str = "0.1.0"
     debug: bool = False
     environment: str = "development"
-
     database_url: str = "postgresql+asyncpg://jobflow:jobflow@localhost:5432/jobflow"
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str | None = None
     celery_result_backend: str | None = None
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
+    jwt_secret: str = "change-me-in-production"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    admin_username: str = "admin"
+    admin_password: str = "change-me-now"
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore")
     @property
-    def broker_url(self) -> str:
-        """Return the configured Celery broker, defaulting to Redis."""
-
-        return self.celery_broker_url or self.redis_url
-
+    def broker_url(self) -> str: return self.celery_broker_url or self.redis_url
     @property
-    def result_backend(self) -> str:
-        """Return the configured Celery result backend, defaulting to Redis."""
-
-        return self.celery_result_backend or self.redis_url
-
+    def result_backend(self) -> str: return self.celery_result_backend or self.redis_url
+    @property
+    def allowed_origins(self) -> list[str]: return [x.strip() for x in self.cors_origins.split(",") if x.strip()]
 
 @lru_cache
-def get_settings() -> Settings:
-    """Return the cached application settings instance."""
-
-    return Settings()
-
-
+def get_settings() -> Settings: return Settings()
 settings = get_settings()
