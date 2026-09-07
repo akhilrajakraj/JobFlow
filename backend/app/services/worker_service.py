@@ -13,21 +13,32 @@ HEARTBEAT_TIMEOUT_SECONDS = 60
 
 
 async def register_worker(session: AsyncSession, data: WorkerRegister) -> Worker:
+    """Register a worker or refresh its current registration."""
     worker = await session.scalar(select(Worker).where(Worker.worker_name == data.worker_name))
     now = datetime.now(timezone.utc)
     if worker is None:
-        worker = Worker(worker_name=data.worker_name, hostname=data.hostname, concurrency=data.concurrency,
-                        metadata=data.metadata, status="ONLINE", last_heartbeat_at=now)
+        worker = Worker(
+            worker_name=data.worker_name,
+            hostname=data.hostname,
+            concurrency=data.concurrency,
+            worker_metadata=data.metadata,
+            status="ONLINE",
+            last_heartbeat_at=now,
+        )
         session.add(worker)
     else:
-        worker.hostname, worker.concurrency, worker.metadata = data.hostname, data.concurrency, data.metadata
-        worker.status, worker.last_heartbeat_at = "ONLINE", now
+        worker.hostname = data.hostname
+        worker.concurrency = data.concurrency
+        worker.worker_metadata = data.metadata
+        worker.status = "ONLINE"
+        worker.last_heartbeat_at = now
     await session.commit()
     await session.refresh(worker)
     return worker
 
 
 async def heartbeat_worker(session: AsyncSession, worker_name: str) -> Worker | None:
+    """Record a heartbeat for a registered worker."""
     worker = await session.scalar(select(Worker).where(Worker.worker_name == worker_name))
     if worker is None:
         return None
@@ -39,6 +50,7 @@ async def heartbeat_worker(session: AsyncSession, worker_name: str) -> Worker | 
 
 
 async def list_workers(session: AsyncSession) -> list[Worker]:
+    """Return workers and mark registrations that missed heartbeats as stale."""
     result = await session.execute(select(Worker).order_by(Worker.registered_at.desc()))
     workers = list(result.scalars().all())
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS)
