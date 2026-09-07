@@ -12,6 +12,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
   redis:
     image: redis:8-alpine
     ports: ["6379:6379"]
@@ -21,6 +22,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  migrate:
+    build: {context: ../../backend}
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+asyncpg://jobflow:jobflow@postgres:5432/jobflow
+    depends_on:
+      postgres: {condition: service_healthy}
+
   api:
     build: {context: ../../backend}
     environment:
@@ -28,25 +38,36 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-now}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-false}
     ports: ["8000:8000"]
     depends_on:
-      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
+
   worker:
     build: {context: ../../backend}
-    command: celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
+    command: celery -A app.worker.celery_app.celery_app worker --loglevel=INFO --hostname=%h
     environment:
       DATABASE_URL: postgresql+asyncpg://jobflow:jobflow@postgres:5432/jobflow
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
-      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
+
   frontend:
     build: ../../frontend
     ports: ["3000:80"]
     depends_on: [api]
+
 volumes:
   postgres_data:
   redis_data:
