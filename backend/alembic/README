@@ -1,0 +1,1 @@
+JobFlow database migrations live in this directory. Run `alembic upgrade head` from backend after starting PostgreSQL.
