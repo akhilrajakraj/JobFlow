@@ -5,47 +5,35 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-jobflow}
       POSTGRES_USER: ${POSTGRES_USER:-jobflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobflow}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jobflow} -d ${POSTGRES_DB:-jobflow}"]
       interval: 5s
       timeout: 5s
       retries: 10
-
   redis:
     image: redis:8-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+    ports: ["6379:6379"]
+    volumes: [redis_data:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 10
-
   api:
-    build:
-      context: ../../backend
+    build: {context: ../../backend}
     environment:
       DATABASE_URL: postgresql+asyncpg://jobflow:jobflow@postgres:5432/jobflow
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-    ports:
-      - "8000:8000"
+    ports: ["8000:8000"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
   worker:
-    build:
-      context: ../../backend
+    build: {context: ../../backend}
     command: celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
     environment:
       DATABASE_URL: postgresql+asyncpg://jobflow:jobflow@postgres:5432/jobflow
@@ -53,11 +41,12 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  frontend:
+    build: ../../frontend
+    ports: ["3000:80"]
+    depends_on: [api]
 volumes:
   postgres_data:
   redis_data:
