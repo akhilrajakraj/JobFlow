@@ -53,10 +53,10 @@ async def submit_job(
 
 @router.get("", response_model=JobListResponse)
 async def get_jobs(
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
     session: Session,
     _: AuthenticatedUser,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ) -> JobListResponse:
     """Return a paginated list of jobs."""
     items, total = await list_jobs(session, limit=limit, offset=offset)
