@@ -24,7 +24,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 Session = Annotated[AsyncSession, Depends(get_db)]
 AuthenticatedUser = Annotated[User, Depends(current_user)]
 Operator = Annotated[User, Depends(require_role("ADMIN", "OPERATOR"))]
-IdempotencyHeader = Annotated[str | None, Header(alias="Idempotency-Key")]
+IdempotencyHeader = Annotated[str | None, Header(default=None, alias="Idempotency-Key")]
 
 
 @router.post("", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
