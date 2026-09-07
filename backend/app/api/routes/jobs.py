@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import current_user, require_role
@@ -20,7 +20,12 @@ async def submit_job(
     data: JobCreate,
     session: AsyncSession = Depends(get_db),
     _: User = Depends(require_role("ADMIN", "OPERATOR")),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> JobResponse:
+    if idempotency_key:
+        if data.idempotency_key and data.idempotency_key != idempotency_key:
+            raise HTTPException(status_code=400, detail="Body and Idempotency-Key header do not match")
+        data = data.model_copy(update={"idempotency_key": idempotency_key})
     try:
         return await create_job(session, data)
     except IdempotencyConflictError as exc:
